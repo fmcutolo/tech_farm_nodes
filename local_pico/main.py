@@ -14,6 +14,7 @@ from machine import Pin
 
 GP0  = 0    # is on PIN 1   input,  switch_input
 
+print("Node000")
 print("I'm a node")
 print("*")
 print("*")
@@ -182,6 +183,7 @@ while True:
         print("there's a message!")
         received_message = GetMessage()
         print("received message:", received_message)
+        DebugWrite("received message:" + received_message)
         command = GetCommand(received_message)
         #master_id = lora.GetMasterId(received_message)
         ShowIt(f"{INFO_PROMPT} command = {command}")
