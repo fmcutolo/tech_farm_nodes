@@ -1,13 +1,12 @@
 import time
-
 class TimersManager:
     def __init__(self) -> None:
         self.small = {}
 
-    def Start(self,id_key,duration):
+    def Start(self,id_key,duration_ms):
         start_time = time.ticks_ms()  #micro_python
 #        start_time = time.time()  
-        self.small[id_key] = [start_time, duration]
+        self.small[id_key] = [start_time, duration_ms]
 
     def ReStart(self,id_key):
         start_time = time.ticks_ms()  #micro_python
@@ -18,7 +17,9 @@ class TimersManager:
     def Expired(self,id_key):
         timer_expired = False
         the_timer = self.small[id_key]
-        if time.ticks_ms() - the_timer[0] >= the_timer[1]: #micro_python
+        #if time.ticks_ms() - the_timer[0] >= the_timer[1]: #micro_python
+        if time.ticks_diff(time.ticks_ms(), the_timer[0]) >= the_timer[1]: #micro_python
+
         #if time.time() - the_timer[0] >= the_timer[1]:
             timer_expired = True 
         return timer_expired

@@ -1,0 +1,34 @@
+{
+ 
+    "VsCodeTaskButtons.tasks": [
+        {
+            "label": "=? Compare Pico",
+            "task": "Compare Pico"
+        },
+
+        {
+            "label": "=> Update Pico",
+            "task": "Update Pico"
+        },
+
+        {
+            "label": "<> Diff Pico File",
+            "task": "Diff Pico File"
+        },
+
+        {
+            "label": "=1 Copy Active File to Pico",
+            "task": "Copy Active File to Pico"
+        },
+        
+        {
+            "label": "?1 Compare File to Pico",
+            "task": "Compare File to Pico"
+        },
+        
+        {
+            "label": "## Run Active File on Pico",
+            "task": "Run Active File on Pico"
+        },
+    ]
+}

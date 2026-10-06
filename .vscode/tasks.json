@@ -1,0 +1,90 @@
+{
+    "version": "2.0.0",
+    "tasks": [
+        {
+            "label": "Compare Pico",
+            "type": "shell",
+            "command": "powershell.exe",
+            "args": [
+                "-ExecutionPolicy",
+                "Bypass",
+                "-File",
+                "${workspaceFolder}\\development_tools\\compare_pico.ps1"
+            ],
+            "options": {
+                "cwd": "${workspaceFolder}"
+            },
+            "problemMatcher": []
+        },
+
+        {
+            "label": "Update Pico",
+            "type": "shell",
+            "command": "powershell",
+            "args": [
+                "-ExecutionPolicy",
+                "Bypass",
+                "-File",
+                "${workspaceFolder}\\development_tools\\copy_changed_to_pico.ps1"
+            ],
+            "problemMatcher": []
+        },
+
+        {
+            "label": "Diff Pico File",
+            "type": "shell",
+            "command": "powershell",
+            "args": [
+                "-ExecutionPolicy",
+                "Bypass",
+                "-File",
+                "${workspaceFolder}\\development_tools\\diff_pico_file.ps1",
+                "${file}"
+            ],
+            "problemMatcher": []
+        },
+        
+        {
+            "label": "Copy Active File to Pico",
+            "type": "shell",
+            "command": "powershell",
+            "args": [
+                "-ExecutionPolicy",
+                "Bypass",
+                "-File",
+                "${workspaceFolder}\\development_tools\\copy_file_to_pico.ps1",
+                "${file}"
+            ],
+            "problemMatcher": []
+        },
+    
+        {
+            "label": "Compare File to Pico",
+            "type": "shell",
+            "command": "powershell",
+            "args": [
+                "-ExecutionPolicy",
+                "Bypass",
+                "-File",
+                "${workspaceFolder}\\development_tools\\compare_file_to_pico.ps1",
+                "${file}"
+            ],
+            "problemMatcher": []
+        },
+
+        {
+            "label": "Run Active File on Pico",
+            "type": "shell",
+            "command": "powershell",
+            "args": [
+                "-ExecutionPolicy",
+                "Bypass",
+                "-File",
+                "${workspaceFolder}\\development_tools\\run_active_file.ps1",
+                "${file}"
+            ],
+            "problemMatcher": []
+        }    
+
+    ]
+}
