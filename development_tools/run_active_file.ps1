@@ -17,7 +17,11 @@ param (
 # ------------------------------------------------------------
 $mpremote = "F:\environments\env_micro_python\Scripts\mpremote.exe"
 
-$port = "COM19"
+# Load common configuration
+. "$PSScriptRoot\config.ps1"
+
+# $port is now available here
+Write-Host "Using Pico on $port"
 
 # ------------------------------------------------------------
 # Verify that the Pico is available

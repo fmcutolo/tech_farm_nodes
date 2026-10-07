@@ -22,7 +22,13 @@
 
 $localDirectory = (Resolve-Path (Join-Path $PSScriptRoot "..\local_master_pico")).Path
 $listPicoFiles  = Join-Path $PSScriptRoot "list_pico_files.py"
-$port = "COM19"
+
+# Load common configuration
+. "$PSScriptRoot\config.ps1"
+
+# $port is now available here
+Write-Host "Using Pico on $port"
+
 $mpremote = "F:\environments\env_micro_python\Scripts\mpremote.exe"
 
 # ------------------------------------------------------------

@@ -8,9 +8,12 @@ param (
 #     [string]$localFile = "F:\projects\tech_farm\tech_farm_nodes\local_master_pico\lib\pulse_generator\pulse_generator.py"
 # )
 
+# Load common configuration
+. "$PSScriptRoot\config.ps1"
 
+# $port is now available here
+Write-Host "Using Pico on $port"
 
-$port = "COM19"
 $mpremote = "F:\environments\env_micro_python\Scripts\mpremote.exe"
 
 # ------------------------------------------------------------

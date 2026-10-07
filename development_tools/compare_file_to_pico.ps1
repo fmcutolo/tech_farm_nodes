@@ -33,7 +33,11 @@ param (
 # Configuration
 # ------------------------------------------------------------
 
-$port = "COM19"
+# Load common configuration
+. "$PSScriptRoot\config.ps1"
+
+# $port is now available here
+Write-Host "Using Pico on $port"
 
 $python = "F:\environments\env_micro_python\Scripts\python.exe"
 
