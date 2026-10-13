@@ -1,1 +1,4 @@
 from_pico/
+pico_storage/
+wireshark/
+credentials.py
