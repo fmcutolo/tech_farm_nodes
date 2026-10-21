@@ -9,6 +9,7 @@ import socket
 import json
 
 SERVER = "http://192.168.12.103:5000"
+total_pulses = 0
 total_gallons = 0
 
 def connect_to_wifi():
@@ -26,13 +27,14 @@ def connect_to_wifi():
 
     print("WiFi connected:", wlan.ifconfig())
 
-def post_flow(total_gallons, flow_rate):
+def post_flow(total_gallons, flow_rate, total_pulses):
     host = "192.168.12.103"
     port = 5000
 
     body = json.dumps({
         "total_gallons": total_gallons,
-        "flow_rate": flow_rate
+        "flow_rate": flow_rate,
+        "total_pulses":total_pulses
     }).encode()
 
     request = (
@@ -97,13 +99,17 @@ def log_post_to_csv(total_gallons, duration, rssi, result):
 
 # Interrupt Service Routine
 def edge_isr(pin):
-    global total_gallons
-    total_gallons += 1
+    global total_pulses
+    total_pulses += 1
 
 def initialize_edge_isr():
 # Interrupt on rising edge
     input_pin = Pin(12, Pin.IN, Pin.PULL_DOWN)
     input_pin.irq(trigger=Pin.IRQ_RISING, handler=edge_isr)
+
+PULSES_PER_GALLON = 450 * 3.78541   # (450 pulses/Liter) (3.78541 Liters/Gallon) 
+def convert_to_gallons(total_pulses):
+    return total_pulses / PULSES_PER_GALLON
 
 
 initialize_edge_isr()
@@ -121,7 +127,7 @@ post_update_timer = TimersManager()
 post_update_timer.Start("post_it",10000) 
 post_update_timer.Start("flow_rate",60000)  
 
-last_pulse_count = total_gallons
+last_gallon_count = total_gallons
 last_flow_time = ticks_ms()
 flow_rate = 0.0
 
@@ -131,12 +137,13 @@ while True:
     # Calculate flow rate every 60 seconds
     # -----------------------------------
     if post_update_timer.Expired("flow_rate"):
+        post_update_timer.ReStart("flow_rate")
 
         now = ticks_ms()
-        #current_count = total_gallons
+        total_gallons = convert_to_gallons(total_pulses)
 
         elapsed_ms = ticks_diff(now, last_flow_time)
-        pulse_difference = total_gallons - last_pulse_count
+        pulse_difference = total_gallons - last_gallon_count
 
         if elapsed_ms > 0:
             flow_rate = pulse_difference * 60000 / elapsed_ms
@@ -145,10 +152,9 @@ while True:
         print("Pulses counted:", pulse_difference)
         print("Calculated GPM:", flow_rate)
 
-        last_pulse_count = total_gallons
+        last_gallon_count = total_gallons
         last_flow_time = now
 
-        post_update_timer.ReStart("flow_rate")
 
     # -----------------------------------
     # Send readings to Flask Server
@@ -157,12 +163,13 @@ while True:
         post_update_timer.ReStart("post_it")
         print("Posting total_gallons =", total_gallons)
         print("Posting flow_rate =", flow_rate)
+        print("Posting total_pulses =", total_pulses)
 
         wlan = network.WLAN(network.STA_IF)
         if not wlan.isconnected():
             print("Wi-Fi Disconnected!")
 
-        post_flow(total_gallons, flow_rate)
+        post_flow(total_gallons, flow_rate, total_pulses)
     sleep(1)
 
 
