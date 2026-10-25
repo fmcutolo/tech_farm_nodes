@@ -1,20 +1,17 @@
 import network
 from time import sleep, time, ticks_ms, ticks_diff
-import requests
-from pulse_generator.tools_pulse_generator import generate_pulses,one_khz_interrupt, GenerateAsyncPulses, kill_generate_pulses, kill_one_khz_interrupt
 from timersmanager import TimersManager
 from machine import Pin
 from credentials import WIFI_SSID, WIFI_PASSWORD
 import socket
 import json
+from water_storage import save_total_pulses, load_total_pulses
 
-SERVER = "http://192.168.12.103:5000"
-total_pulses = 0
-total_gallons = 0
 
 def connect_to_wifi():
     # ssid = WIFI_SSID
     # password = WIFI_PASSWORD
+    global wlan
     print("in connect_to_wifi()")
     wlan = network.WLAN(network.STA_IF)
     wlan.active(True)
@@ -32,9 +29,11 @@ def post_flow(total_gallons, flow_rate, total_pulses):
     port = 5000
 
     body = json.dumps({
+        "meter_id": METER_ID,
+        "session_id": SESSION_ID,
         "total_gallons": total_gallons,
         "flow_rate": flow_rate,
-        "total_pulses":total_pulses
+        "total_pulses":total_pulses #  for debug only
     }).encode()
 
     request = (
@@ -88,14 +87,22 @@ def post_flow(total_gallons, flow_rate, total_pulses):
         if sock is not None:
             sock.close()
 
-def log_post_to_csv(total_gallons, duration, rssi, result):
-    with open("wifi_log.csv", "a") as f:
-        f.write("{},{},{},{}\n".format(
-            total_gallons,
-            duration,
-            rssi,
-            result
-        ))
+def check_if_to_post():
+    global last_saved_pulses
+    current_pulses = total_pulses
+    print("current_pulses=", current_pulses, "   last_saved_pulses=", last_saved_pulses)
+    if (current_pulses != last_saved_pulses):
+        print("b:")
+        save_total_pulses(current_pulses)
+        last_saved_pulses = current_pulses
+
+        # Calculate current gallons
+        total_gallons = convert_to_gallons(current_pulses)
+
+        print("Posting total_gallons =", total_gallons)
+        print("Posting flow_rate =", flow_rate)
+        print("Posting total_pulses =", current_pulses)
+        post_flow(total_gallons, flow_rate, current_pulses)
 
 # Interrupt Service Routine
 def edge_isr(pin):
@@ -107,30 +114,33 @@ def initialize_edge_isr():
     input_pin = Pin(12, Pin.IN, Pin.PULL_DOWN)
     input_pin.irq(trigger=Pin.IRQ_RISING, handler=edge_isr)
 
-PULSES_PER_GALLON = 450 * 3.78541   # (450 pulses/Liter) (3.78541 Liters/Gallon) 
 def convert_to_gallons(total_pulses):
     return total_pulses / PULSES_PER_GALLON
 
 
+
+METER_ID = "irrigation_1"
+SERVER = "http://192.168.12.103:5000"
+SESSION_ID = 22
+PULSES_PER_GALLON = 450 * 3.78541   # (450 pulses/Liter) (3.78541 Liters/Gallon) 
+total_pulses = load_total_pulses()
+print("Initializing total_pulses: ",total_pulses)
+total_gallons = total_pulses / PULSES_PER_GALLON
+last_saved_pulses = total_pulses
+
 initialize_edge_isr()
 connect_to_wifi()
 
-# NB Pulses and Gallons are used interchangeably, an 1 pulse = 1 gallon
-
-# 1000, 1/1000 = 1 pulses/sec, in one minute (60 pulses/min)  = 60 gallons/minute
-PERIOD_IN_MS = 1000
-WIDTH_IN_MS  = 100
-NUMBER_OF_PULSES = 0 # 0 = continuous
-generate_pulses(PERIOD_IN_MS,WIDTH_IN_MS, NUMBER_OF_PULSES)
-
 post_update_timer = TimersManager()
-post_update_timer.Start("post_it",10000) 
+post_update_timer.Start("post_it",2000) 
 post_update_timer.Start("flow_rate",60000)  
 
 last_gallon_count = total_gallons
 last_flow_time = ticks_ms()
 flow_rate = 0.0
-
+last_flow_rate = 0.0
+post_flow(total_gallons, flow_rate, total_pulses)
+FLOW_RATE_TOLERANCE = 0.01
 while True:
 
     # -----------------------------------
@@ -143,80 +153,33 @@ while True:
         total_gallons = convert_to_gallons(total_pulses)
 
         elapsed_ms = ticks_diff(now, last_flow_time)
-        pulse_difference = total_gallons - last_gallon_count
+        gallons_measured = total_gallons - last_gallon_count
 
         if elapsed_ms > 0:
-            flow_rate = pulse_difference * 60000 / elapsed_ms
+            flow_rate = gallons_measured * 60000 / elapsed_ms
 
-        print("Elapsed milliseconds:", elapsed_ms)
-        print("Pulses counted:", pulse_difference)
-        print("Calculated GPM:", flow_rate)
+        print("60min: Elapsed milliseconds=", elapsed_ms)
+        print("60min: Gallons measured=", gallons_measured)
+        print("60min: Calculated GPM=", flow_rate)
 
         last_gallon_count = total_gallons
         last_flow_time = now
+        if abs(flow_rate - last_flow_rate) > FLOW_RATE_TOLERANCE:
+            last_flow_rate = flow_rate
+            print("60min: Posting total_gallons =", total_gallons)
+            print("60min: Posting flow_rate =", flow_rate)
+            print("60min: Posting total_pulses =", total_pulses)
+            post_flow(total_gallons, flow_rate, total_pulses)
 
+           
+        
 
     # -----------------------------------
     # Send readings to Flask Server
     # -----------------------------------
     if post_update_timer.Expired("post_it"):
         post_update_timer.ReStart("post_it")
-        print("Posting total_gallons =", total_gallons)
-        print("Posting flow_rate =", flow_rate)
-        print("Posting total_pulses =", total_pulses)
+        check_if_to_post()
 
-        wlan = network.WLAN(network.STA_IF)
-        if not wlan.isconnected():
-            print("Wi-Fi Disconnected!")
-
-        post_flow(total_gallons, flow_rate, total_pulses)
     sleep(1)
-
-
-# ******************  generate_pulses() usage
-# uses timer interrupts
-#example 1
-# PERIOD_IN_MS = 4
-# WIDTH_IN_MS = 1
-# NUMBER_OF_PULSES = 3 # 0 = continuous
-# generate_pulses(PERIOD_IN_MS,WIDTH_IN_MS, NUMBER_OF_PULSES)
-# some_counter = 0
-# while 1:
-#     sleep(1)
-#     print("generate_pulses(): some_counters=",some_counter)
-#     some_counter += 2
-
-#example 2
-# PERIOD_IN_MS = 2
-# WIDTH_IN_MS = 1
-# NUMBER_OF_PULSES = 0 
-# generate_pulses(PERIOD_IN_MS,WIDTH_IN_MS, NUMBER_OF_PULSES)
-# some_counter = 0
-# while 1:
-#     sleep(1)
-#     print("generate_pulses(): some_counters=",some_counter)
-#     some_counter += 2
-
-# ******************  one_khz_interrupt() usage
-millisecond_counter = 0
-def this_function_is_a_callback():
-    global millisecond_counter
-    millisecond_counter += 1
-    
-some_counter = 0
-one_khz_interrupt(this_function_is_a_callback)
-while 1:
-    sleep(1)
-    print("some_counters=",some_counter, "    milliseconds counter = ", millisecond_counter)
-    some_counter += 1
-
-# ******************  GenerateAsyncPulses()
-# Interrupts are not used
-PERIOD_IN_MS = 100
-WIDTH_IN_MS = 50
-GenerateAsyncPulses(PERIOD_IN_MS, WIDTH_IN_MS) # Note it does not return!
-
-# 
-# the following defaults to period = 1000 msecs, and width = 500 msec
-GenerateAsyncPulses() # Note it does not return!
 

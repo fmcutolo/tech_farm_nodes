@@ -2,3 +2,4 @@ from_pico/
 pico_storage/
 wireshark/
 credentials.py
+water_meter.json
