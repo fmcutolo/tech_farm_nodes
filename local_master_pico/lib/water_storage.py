@@ -8,10 +8,10 @@ TEMP_FILE = "/water_meter.tmp"
 def save_total_pulses(total_pulses):
     with open(TEMP_FILE, "w") as f:
         json.dump({"total_pulses": total_pulses}, f)
-    print("current directory", os.getcwd())
-    print(os.listdir("/"))
+    print("current directory:", os.getcwd())
+    #print(os.listdir("/"))   # keep for debug
     os.rename(TEMP_FILE, FILE)
-    print(os.listdir("/"))
+    #print(os.listdir("/"))   # keep for debug
 
 
 def load_total_pulses():

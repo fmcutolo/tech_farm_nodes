@@ -1,108 +1,13 @@
-import network
-from time import sleep, time, ticks_ms, ticks_diff
-from timersmanager import TimersManager
+from time import sleep, ticks_ms, ticks_diff
+#import network
+#from credentials import WIFI_SSID, WIFI_PASSWORD
+#import socket
+from udp_post import flow, initialize_udp_post, close_udp_post
 from machine import Pin
-from credentials import WIFI_SSID, WIFI_PASSWORD
-import socket
-import json
 from water_storage import save_total_pulses, load_total_pulses
+from timersmanager import TimersManager
 
-
-def connect_to_wifi():
-    # ssid = WIFI_SSID
-    # password = WIFI_PASSWORD
-    global wlan
-    print("in connect_to_wifi()")
-    wlan = network.WLAN(network.STA_IF)
-    wlan.active(True)
-    wlan.config(pm=0xa11140)   # Disable Wi-Fi power management
-    wlan.connect(WIFI_SSID, WIFI_PASSWORD)
-
-    while not wlan.isconnected():
-        print("Attempting to connect to: ", SERVER, "  ssid = ", WIFI_SSID)
-        sleep(0.5)
-
-    print("WiFi connected:", wlan.ifconfig())
-
-def post_flow(total_gallons, flow_rate, total_pulses):
-    host = "192.168.12.103"
-    port = 5000
-
-    body = json.dumps({
-        "meter_id": METER_ID,
-        "session_id": SESSION_ID,
-        "total_gallons": total_gallons,
-        "flow_rate": flow_rate,
-        "total_pulses":total_pulses #  for debug only
-    }).encode()
-
-    request = (
-        "POST /flow HTTP/1.0\r\n"
-        "Host: {}\r\n"
-        "Content-Type: application/json\r\n"
-        "Content-Length: {}\r\n"
-        "Connection: close\r\n"
-        "\r\n"
-    ).format(host, len(body)).encode() + body
-
-    sock = None
-    start = ticks_ms()
-
-    try:
-        sock = socket.socket()
-        sock.settimeout(3)
-        sock.connect((host, port))
-
-        # Send the complete HTTP request
-        sock.sendall(request)
-
-        # Receive the beginning of Flask's response
-        #response = sock.recv(512)
-
-        #get the whole response instead.
-        response = b""
-        while True:
-            chunk = sock.recv(512)
-            if not chunk:
-                break
-            response += chunk
-
-        duration = ticks_diff(ticks_ms(), start)
-
-        status_line = response.split(b"\r\n", 1)[0]
-
-        print("HTTP response:", status_line,"   WiFi RSSI:", wlan.status("rssi"), "dBm" )
-        print("POST duration:", duration, "ms")
-        print()
-
-        return duration
-
-    except OSError as e:
-        duration = ticks_diff(ticks_ms(), start)
-        print("POST failed:", e)
-        print("POST duration:", duration, "ms")
-        return None
-
-    finally:
-        if sock is not None:
-            sock.close()
-
-def check_if_to_post():
-    global last_saved_pulses
-    current_pulses = total_pulses
-    print("current_pulses=", current_pulses, "   last_saved_pulses=", last_saved_pulses)
-    if (current_pulses != last_saved_pulses):
-        print("b:")
-        save_total_pulses(current_pulses)
-        last_saved_pulses = current_pulses
-
-        # Calculate current gallons
-        total_gallons = convert_to_gallons(current_pulses)
-
-        print("Posting total_gallons =", total_gallons)
-        print("Posting flow_rate =", flow_rate)
-        print("Posting total_pulses =", current_pulses)
-        post_flow(total_gallons, flow_rate, current_pulses)
+# ****************************  MAIN LOOP  *********************************
 
 # Interrupt Service Routine
 def edge_isr(pin):
@@ -117,69 +22,112 @@ def initialize_edge_isr():
 def convert_to_gallons(total_pulses):
     return total_pulses / PULSES_PER_GALLON
 
+def save_if_changed():
+    global last_saved_pulses
+
+    current_pulses = total_pulses
+
+    if current_pulses != last_saved_pulses:
+        save_total_pulses(current_pulses)
+        last_saved_pulses = current_pulses
+
+def post_if_changed(message):
+    global last_posted_pulses, last_posted_flow_rate
+
+    current_pulses = total_pulses
+    if (current_pulses != last_posted_pulses or
+        last_posted_flow_rate is None or
+        abs(flow_rate - last_posted_flow_rate) > FLOW_RATE_TOLERANCE):
+
+        current_gallons = convert_to_gallons(current_pulses)
+
+        print("POST starting:", message, ticks_ms())
+        payload["total_gallons"] = current_gallons
+        payload["total_pulses"]  = total_pulses
+        payload["flow_rate"] = flow_rate
+        flow(payload)
+        print("POST finished:", message, ticks_ms())   
+        print()
+
+        last_posted_pulses = current_pulses
+        last_posted_flow_rate = flow_rate
 
 
-METER_ID = "irrigation_1"
-SERVER = "http://192.168.12.103:5000"
-SESSION_ID = 22
-PULSES_PER_GALLON = 450 * 3.78541   # (450 pulses/Liter) (3.78541 Liters/Gallon) 
+
 total_pulses = load_total_pulses()
+PULSES_PER_GALLON = 450 * 3.78541   # (450 pulses/Liter) (3.78541 Liters/Gallon) 
 print("Initializing total_pulses: ",total_pulses)
 total_gallons = total_pulses / PULSES_PER_GALLON
 last_saved_pulses = total_pulses
+last_posted_pulses = None
+last_posted_flow_rate = None
+
+PULSES_PER_GALLON = 450 * 3.78541   # (450 pulses/Liter) (3.78541 Liters/Gallon) 
+
+initialize_udp_post()
+
+
+print("version 6")
+METER_ID = "meter_1"
+SESSION_ID = "ss1"
+debug_string = "initially no errors"
+packet_number = 0
+payload = {
+    "meter_id": METER_ID,
+    "session_id": SESSION_ID,
+    "total_gallons": packet_number,
+    "flow_rate": 1,
+    "total_pulses":2, #  for debug only
+    "debug_string":debug_string
+}
 
 initialize_edge_isr()
-connect_to_wifi()
-
 post_update_timer = TimersManager()
-post_update_timer.Start("post_it",2000) 
+post_update_timer.Start("post_it",3000) 
 post_update_timer.Start("flow_rate",60000)  
+post_update_timer.Start("tester",15000)  
+testit = True
 
 last_gallon_count = total_gallons
 last_flow_time = ticks_ms()
 flow_rate = 0.0
 last_flow_rate = 0.0
-post_flow(total_gallons, flow_rate, total_pulses)
 FLOW_RATE_TOLERANCE = 0.01
-while True:
 
-    # -----------------------------------
+try:
+    while True:
+
+# -----------------------------------
     # Calculate flow rate every 60 seconds
     # -----------------------------------
-    if post_update_timer.Expired("flow_rate"):
-        post_update_timer.ReStart("flow_rate")
-
-        now = ticks_ms()
-        total_gallons = convert_to_gallons(total_pulses)
-
-        elapsed_ms = ticks_diff(now, last_flow_time)
-        gallons_measured = total_gallons - last_gallon_count
-
-        if elapsed_ms > 0:
+        if post_update_timer.Expired("flow_rate"):
+            post_update_timer.ReStart("flow_rate")
+            now = ticks_ms()
+            total_gallons = convert_to_gallons(total_pulses)
+            elapsed_ms = ticks_diff(now, last_flow_time)
+            gallons_measured = total_gallons - last_gallon_count
             flow_rate = gallons_measured * 60000 / elapsed_ms
+            print("60sec: Elapsed ms=", elapsed_ms, "  Gallons=", gallons_measured, "  GPM=", flow_rate)
+            last_gallon_count = total_gallons
+            last_flow_time = now
+            post_if_changed("60secPost:")
 
-        print("60min: Elapsed milliseconds=", elapsed_ms)
-        print("60min: Gallons measured=", gallons_measured)
-        print("60min: Calculated GPM=", flow_rate)
+        if post_update_timer.Expired("post_it"):
+            post_update_timer.ReStart("post_it")
+            save_if_changed()
+            post_if_changed("3secPost:")
 
-        last_gallon_count = total_gallons
-        last_flow_time = now
-        if abs(flow_rate - last_flow_rate) > FLOW_RATE_TOLERANCE:
-            last_flow_rate = flow_rate
-            print("60min: Posting total_gallons =", total_gallons)
-            print("60min: Posting flow_rate =", flow_rate)
-            print("60min: Posting total_pulses =", total_pulses)
-            post_flow(total_gallons, flow_rate, total_pulses)
+        if post_update_timer.Expired("tester"):
+            post_update_timer.ReStart("tester")
+            total_pulses += 1703/4
 
-           
-        
 
-    # -----------------------------------
-    # Send readings to Flask Server
-    # -----------------------------------
-    if post_update_timer.Expired("post_it"):
-        post_update_timer.ReStart("post_it")
-        check_if_to_post()
 
-    sleep(1)
+except KeyboardInterrupt:
+    print("\nCtrl+C received - stopping program")
+
+finally:
+    print("Cleaning up resources")
+    close_udp_post() 
+    print("Program terminated")
 
