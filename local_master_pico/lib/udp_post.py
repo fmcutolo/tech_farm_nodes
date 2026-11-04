@@ -62,11 +62,27 @@ def create_socket():
         return None
     return a_socket
 
+def create_command_socket():
+    global command_socket, command_address
+
+    close_command_socket()
+    command_address = None
+
+    command_socket = socket.socket(
+        socket.AF_INET,
+        socket.SOCK_DGRAM
+    )
+
+    command_socket.bind(("0.0.0.0", COMMAND_PORT))
+    command_socket.setblocking(False)
+    return command_socket
+
 def initialize_udp_post():
-    global the_socket
+    global the_socket, command_socket
     initialize_start_time()
     connect_to_wifi()
     the_socket = create_socket()
+    command_socket = create_command_socket()
 
 def close_udp_post():
     close_socket(the_socket)
@@ -117,3 +133,33 @@ def flow(a_payload):
             else:                
                 sleep(3)
 
+
+# **************** RECEIVE COMMANDS FROM SERVER
+import errno
+
+COMMAND_PORT = 55001
+command_address = None
+command_socket = None
+print("just executed above")
+
+def check_commands():
+    global command_address
+
+    try:
+        data, command_address = command_socket.recvfrom(1024)
+        return data.decode()
+
+    except OSError as e:
+        if e.errno != errno.EAGAIN:
+            print("UDP receive error:", e)
+        return None
+
+def send_command_ack(a_message):
+    if command_address is not None:
+        command_socket.sendto(
+            a_message.encode(),
+            command_address
+        )
+
+def close_command_socket():
+    close_socket(command_socket)
