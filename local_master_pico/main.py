@@ -48,20 +48,48 @@ def post_if_changed(message):
         last_posted_flow_rate = flow_rate
 
 def reset_meter_pulse_count():
-    global total_pulses, last_saved_total_pulses, last_total_gallons, last_posted_pulses, flow_rate, last_posted_flow_rate
+    global total_pulses, last_saved_total_pulses, last_total_gallons, last_posted_pulses, flow_rate, last_posted_flow_rate, last_drip
     total_pulses = 0
     last_saved_total_pulses = 0
     last_total_gallons = 0
     last_posted_pulses = 0
     flow_rate = 0 
     last_posted_flow_rate = None
+    last_drip = 0
     save_total_pulses(0)
+
+DRY_STATE = 1
+WET_STATE = 2
+state = DRY_STATE
+def flow_detection_state_machine():
+    global state, last_drip
+
+    if state == DRY_STATE:
+        if total_pulses > last_drip:
+            state = WET_STATE
+            last_drip = total_pulses
+            flow({"flow_detector":"wet"})
+            print("Going to: WET_STATE")
+
+    elif state == WET_STATE:
+        if total_pulses == last_drip:
+            state = DRY_STATE
+            flow({"flow_detector":"dry"})
+            print("Going to: DRY_STATE")
+        else:
+            last_drip = total_pulses
+
+
+
+
+
 
 total_pulses = load_total_pulses()
 PULSES_PER_GALLON = 450 * 3.78541   # (450 pulses/Liter) (3.78541 Liters/Gallon) 
 print("Initializing total_pulses: ",total_pulses)
 total_gallons = total_pulses / PULSES_PER_GALLON
 last_saved_total_pulses = total_pulses
+last_drip = total_pulses
 last_posted_pulses = None
 last_posted_flow_rate = None
 
@@ -89,6 +117,7 @@ post_update_timer = TimersManager()
 post_update_timer.Start("post_it",3000) 
 post_update_timer.Start("flow_rate",60000)  
 post_update_timer.Start("tester",15000)  
+post_update_timer.Start("flow_detection",1000)  
 testit = True
 
 last_total_gallons = total_gallons
@@ -122,6 +151,10 @@ try:
             save_if_changed()
             post_if_changed("3secPost:")
 
+        if post_update_timer.Expired("flow_detection"):
+            post_update_timer.ReStart("flow_detection")
+            flow_detection_state_machine()
+
         command = check_commands()
         if command is not None:
             print("Command received:", command)
@@ -130,9 +163,11 @@ try:
                 print("Sending: Reset command acknowledged")
                 send_command_ack("RESET_OK")
 
-        if post_update_timer.Expired("tester"):
-            post_update_timer.ReStart("tester")
-            total_pulses += 1703/4
+
+
+        # if post_update_timer.Expired("tester"):
+        #     post_update_timer.ReStart("tester")
+        #     total_pulses += 1703/4
 
 
 
