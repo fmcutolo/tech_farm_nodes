@@ -113,11 +113,6 @@ payload = {
 }
 
 initialize_edge_isr()
-post_update_timer = TimersManager()
-post_update_timer.Start("post_it",3000) 
-post_update_timer.Start("flow_rate",60000)  
-post_update_timer.Start("tester",15000)  
-post_update_timer.Start("flow_detection",1000)  
 testit = True
 
 last_total_gallons = total_gallons
@@ -126,6 +121,15 @@ flow_rate = 0.0
 last_flow_rate = 0.0
 FLOW_RATE_TOLERANCE = 0.01
 
+
+flow({"meter_id":"meter_1", "heartbeat":"1"})
+
+post_update_timer = TimersManager()
+post_update_timer.Start("post_it",3000) 
+post_update_timer.Start("flow_rate",60000)  
+post_update_timer.Start("tester",15000)  
+post_update_timer.Start("flow_detection",1000) 
+post_update_timer.Start("heartbeat", 10000) 
 
 # ****************************  MAIN LOOP  *********************************
 try:
@@ -154,6 +158,12 @@ try:
         if post_update_timer.Expired("flow_detection"):
             post_update_timer.ReStart("flow_detection")
             flow_detection_state_machine()
+
+        if post_update_timer.Expired("heartbeat"):
+            post_update_timer.ReStart("heartbeat")
+            print("sending heartbeat")
+            flow({"meter_id":"meter_1", "heartbeat":"1"})
+
 
         command = check_commands()
         if command is not None:
